@@ -1,6 +1,5 @@
 import { WebSocketServer, WebSocket } from "ws";
 import { db } from "./firebaseAdmin.js";
-import { randomUUID } from "crypto";
 import { FieldValue } from "firebase-admin/firestore";
 
 const port = process.env.PORT ? parseInt(process.env.PORT) : 8080;
