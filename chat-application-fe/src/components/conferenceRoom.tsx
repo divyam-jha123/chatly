@@ -121,6 +121,10 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
                 return;
             }
 
+            if (event.candidate) {
+                console.log("ICE Candidate:", event.candidate.candidate);
+            }
+
             socket.send(
                 JSON.stringify({
                     type: "ice",
