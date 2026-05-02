@@ -91,14 +91,30 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
         const pc = new RTCPeerConnection({
             iceServers: [
                 {
-                    urls: "stun:stun.l.google.com:19302",
+                    urls: "stun:stun.relay.metered.ca:80",
                 },
                 {
-                    urls: "turns:openrelay.metered.ca:443?transport=tcp",
-                    username: "openrelayproject",
-                    credential: "openrelayproject"
-                }
+                    urls: "turn:global.relay.metered.ca:80",
+                    username: "70e9e83e994b166075a051aa",
+                    credential: "TljsISXps2qYEEIY",
+                },
+                {
+                    urls: "turn:global.relay.metered.ca:80?transport=tcp",
+                    username: "70e9e83e994b166075a051aa",
+                    credential: "TljsISXps2qYEEIY",
+                },
+                {
+                    urls: "turn:global.relay.metered.ca:443",
+                    username: "70e9e83e994b166075a051aa",
+                    credential: "TljsISXps2qYEEIY",
+                },
+                {
+                    urls: "turns:global.relay.metered.ca:443?transport=tcp",
+                    username: "70e9e83e994b166075a051aa",
+                    credential: "TljsISXps2qYEEIY",
+                },
             ],
+            // iceTransportPolicy: "relay"
         });
 
         const localStream = localStreamRef.current;
@@ -114,6 +130,14 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
             }
         };
 
+        pc.oniceconnectionstatechange = () => {
+            console.log("ICE connection state:", pc.iceConnectionState);
+        };
+
+        pc.onconnectionstatechange = () => {
+            console.log("Peer connection state:", pc.connectionState);
+        };
+
         pc.onicecandidate = (event) => {
             const socket = socketRef.current;
 
@@ -121,9 +145,7 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
                 return;
             }
 
-            if (event.candidate) {
-                console.log("ICE Candidate:", event.candidate.candidate);
-            }
+            console.log("ICE candidate:" , event.candidate.candidate);
 
             socket.send(
                 JSON.stringify({
@@ -401,8 +423,8 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
                             <button
                                 onClick={toggleMic}
                                 className={`flex h-12 w-12 items-center justify-center rounded-full border cursor-pointer transition-colors ${isMuted
-                                        ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
-                                        : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
+                                    ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
+                                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
                                     }`}
                                 title={isMuted ? "Unmute" : "Mute"}
                             >
@@ -411,8 +433,8 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
                             <button
                                 onClick={toggleCamera}
                                 className={`flex h-12 w-12 items-center justify-center rounded-full border cursor-pointer transition-colors ${isCameraOff
-                                        ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
-                                        : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
+                                    ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
+                                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
                                     }`}
                                 title={isCameraOff ? "Turn Camera On" : "Turn Camera Off"}
                             >
@@ -442,8 +464,8 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
                         <button
                             onClick={toggleMic}
                             className={`flex h-12 w-12 items-center justify-center rounded-full border cursor-pointer transition-colors ${isMuted
-                                    ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
-                                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
+                                ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
+                                : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
                                 }`}
                             title={isMuted ? "Unmute" : "Mute"}
                         >
@@ -452,8 +474,8 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
                         <button
                             onClick={toggleCamera}
                             className={`flex h-12 w-12 items-center justify-center rounded-full border cursor-pointer transition-colors ${isCameraOff
-                                    ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
-                                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
+                                ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
+                                : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
                                 }`}
                             title={isCameraOff ? "Turn Camera On" : "Turn Camera Off"}
                         >
