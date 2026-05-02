@@ -94,9 +94,9 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
                     urls: "stun:stun.l.google.com:19302",
                 },
                 {
-                    urls: "turn:your-turn-server.com:3478",
-                    username: "user",
-                    credential: "pass"
+                    urls: "turn:openrelay.metered.ca:443?transport=tcp",
+                    username: "openrelayproject",
+                    credential: "openrelayproject"
                 }
             ],
         });
