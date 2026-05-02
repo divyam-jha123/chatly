@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { ChatBox } from "./chatBox";
 
 interface ChatMessage {
@@ -7,9 +7,24 @@ interface ChatMessage {
   sender: "self" | "other";
 }
 
-export const Chat = () => {
+const TopBar = () => {
   const { chatId } = useParams();
-  const socketRef = useRef<WebSocket | null>(null);
+  const navigate = useNavigate();
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 py-3 sm:px-6">
+      <div className="min-w-0 px-2 py-2">
+        <div className="font-bold text-lg">chatly</div>
+        <div className="text-sm text-gray-500 truncate">Room: {chatId}</div>
+      </div>
+      <button className="shrink-0 border border-gray-300 rounded-md cursor-pointer px-3 py-2 sm:px-4" onClick={() => {
+        navigate(`/room/${chatId}`)
+      }}>join call</button>
+    </div>
+  )
+}
+
+export const Chat = ({socketRef}: {socketRef: MutableRefObject<WebSocket | null>}) => {
+  const { chatId } = useParams();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -18,7 +33,6 @@ export const Chat = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // on new ws conenction
   useEffect(() => {
     if (!chatId) return;
 
@@ -28,29 +42,40 @@ export const Chat = () => {
       localStorage.setItem("chat_userId", userId);
     }
 
-    const wsUrl = import.meta.env.VITE_WS_URL || "ws://localhost:8080";
-    const socket = new WebSocket(wsUrl);
-    socketRef.current = socket;
+    const socket = socketRef.current;
+    if (!socket) return;
 
-    socket.onopen = () => {
-      console.log("connected to the ws server");
-      console.log(chatId);
+    setMessages([]);
+
+    const sendJoin = () => {
+      if (socket.readyState !== WebSocket.OPEN) return;
 
       socket.send(
         JSON.stringify({
           type: "join",
           payload: {
             roomId: chatId,
-            userId: userId,
+            userId,
           },
         }),
       );
     };
 
-    socket.onmessage = (event) => {
+    const handleOpen = () => {
+      console.log("connected to the ws server");
+      console.log(chatId);
+      sendJoin();
+    };
+
+    if (socket.readyState === WebSocket.OPEN) {
+      sendJoin();
+    } else if (socket.readyState === WebSocket.CONNECTING) {
+      socket.addEventListener("open", handleOpen);
+    }
+
+    const handleMessage = (event: MessageEvent<string>) => {
       const parsedData = JSON.parse(event.data);
 
-      // load chat history on join
       if (parsedData.type === "history") {
         const history: ChatMessage[] = parsedData.payload.map(
           (msg: { message: string; sender: string }) => ({
@@ -62,7 +87,6 @@ export const Chat = () => {
         return;
       }
 
-      // real-time incoming message
       const incomingMessage = parsedData?.payload?.message;
       const sender: "self" | "other" =
         parsedData?.payload?.sender === "self" ? "self" : "other";
@@ -72,36 +96,42 @@ export const Chat = () => {
       }
     };
 
+    socket.addEventListener("message", handleMessage);
+
     return () => {
-      socket.close();
+      socket.removeEventListener("open", handleOpen);
+      socket.removeEventListener("message", handleMessage);
     };
-  }, [chatId]);
+  }, [chatId, socketRef]);
 
-    function SendMessage() {
-        if (!input || !socketRef.current || !chatId) return;
+  function SendMessage() {
+    if (!input || !socketRef.current || !chatId) return;
+    if (socketRef.current.readyState !== WebSocket.OPEN) return;
 
-        socketRef.current.send(
-        JSON.stringify({
-            type: "chat",
-            payload: {
-                roomId: chatId,
-                message: input,
-            },
-        }),
+    socketRef.current.send(
+      JSON.stringify({
+        type: "chat",
+        payload: {
+          roomId: chatId,
+          message: input,
+        },
+      }),
     );
 
     setInput("");
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col justify-end">
+    <div className="mx-auto flex h-[calc(100vh-2rem)] w-full max-w-4xl flex-col overflow-hidden bg-white">
+      <TopBar />
+      <div className="flex-1 overflow-y-auto px-3 py-4 sm:px-6">
         {messages.map((msg, idx) => (
-            <ChatBox key={`${msg.text} -- ${idx}`} message={msg.text} sender={msg.sender} />
+          <ChatBox key={`${msg.text} -- ${idx}`} message={msg.text} sender={msg.sender} />
         ))}
         <div ref={messagesEndRef} />
       </div>
-      <div className="flex gap-2 p-4">
+      <div className="border-t border-gray-200 bg-white px-3 py-3 sm:px-6">
+        <div className="flex items-center gap-2">
         <input
           value={input}
           type="text"
@@ -112,9 +142,10 @@ export const Chat = () => {
           onKeyDown={(e) => {
             if (e.key === "Enter") SendMessage();
           }}
-          className="border border-gray-300 rounded-md p-2 w-full"
+          className="w-full border border-gray-300 rounded-md p-3"
         />
-        <button onClick={SendMessage} className="border border-gray-300 rounded-md p-2 cursor-pointer">send</button>
+        <button onClick={SendMessage} className="shrink-0 border border-gray-300 rounded-md px-4 py-3 cursor-pointer">send</button>
+        </div>
       </div>
     </div>
   );
