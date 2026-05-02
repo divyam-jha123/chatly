@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import { useParams } from "react-router-dom";
+import { MicIcon, MicOffIcon, CameraIcon, CameraOffIcon } from "../icons";
 
 interface ConferenceRoomProps {
     socketRef: MutableRefObject<WebSocket | null>;
@@ -39,6 +40,26 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
     const { chatId } = useParams();
     const [isJoining, setIsJoining] = useState(false);
     const [hasJoinedConference, setHasJoinedConference] = useState(false);
+    const [isMuted, setIsMuted] = useState(false);
+    const [isCameraOff, setIsCameraOff] = useState(false);
+
+    const toggleMic = () => {
+        const stream = localStreamRef.current;
+        if (!stream) return;
+        stream.getAudioTracks().forEach((track) => {
+            track.enabled = !track.enabled;
+        });
+        setIsMuted((prev) => !prev);
+    };
+
+    const toggleCamera = () => {
+        const stream = localStreamRef.current;
+        if (!stream) return;
+        stream.getVideoTracks().forEach((track) => {
+            track.enabled = !track.enabled;
+        });
+        setIsCameraOff((prev) => !prev);
+    };
 
     const userId = (() => {
         let storedUserId = localStorage.getItem("chat_userId");
@@ -72,6 +93,11 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
                 {
                     urls: "stun:stun.l.google.com:19302",
                 },
+                {
+                    urls: "turn:your-turn-server.com:3478",
+                    username: "user",
+                    credential: "pass"
+                }
             ],
         });
 
@@ -125,7 +151,17 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
 
     };
 
-    
+    useEffect(() => {
+        startMedia();
+    }, []);
+
+    useEffect(() => {
+        if (localVideo.current && localStreamRef.current) {
+            localVideo.current.srcObject = localStreamRef.current;
+        }
+    }, [hasJoinedConference]);
+
+
 
     const createOfferFor = async (remoteUserId: string) => {
         if (!chatId) return;
@@ -201,10 +237,6 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
         setIsJoining(true);
 
         try {
-
-            const ans = await startMedia();
-
-            console.log("ans", ans);
 
             const socket = socketRef.current;
             if (!socket) return;
@@ -350,14 +382,82 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
                 </button>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-                <div className="overflow-hidden rounded-2xl border border-gray-200 bg-black">
-                    <video className="h-[260px] w-full object-cover md:h-[420px]" autoPlay muted playsInline ref={localVideo} />
+            {!hasJoinedConference ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                    <div className="flex flex-col gap-3">
+                        <div className="relative overflow-hidden rounded-2xl border border-gray-200 bg-black">
+                            <video className="h-[260px] w-full object-cover md:h-[420px]" autoPlay muted playsInline ref={localVideo} />
+                            {isCameraOff && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
+                                    <span className="text-sm text-gray-400">Camera Off</span>
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex items-center justify-center gap-3">
+                            <button
+                                onClick={toggleMic}
+                                className={`flex h-12 w-12 items-center justify-center rounded-full border cursor-pointer transition-colors ${isMuted
+                                        ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
+                                        : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
+                                    }`}
+                                title={isMuted ? "Unmute" : "Mute"}
+                            >
+                                {isMuted ? <MicOffIcon /> : <MicIcon />}
+                            </button>
+                            <button
+                                onClick={toggleCamera}
+                                className={`flex h-12 w-12 items-center justify-center rounded-full border cursor-pointer transition-colors ${isCameraOff
+                                        ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
+                                        : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
+                                    }`}
+                                title={isCameraOff ? "Turn Camera On" : "Turn Camera Off"}
+                            >
+                                {isCameraOff ? <CameraOffIcon /> : <CameraIcon />}
+                            </button>
+                        </div>
+                    </div>
+                    <div className="hidden md:block" />
                 </div>
-                <div className="overflow-hidden rounded-2xl border border-gray-200 bg-black">
-                    <video className="h-[260px] w-full object-cover md:h-[420px]" autoPlay playsInline ref={remoteVideo} />
-                </div>
-            </div>
+            ) : (
+                <>
+                    <div className="grid gap-4 md:grid-cols-2">
+                        <div className="relative overflow-hidden rounded-2xl border border-gray-200 bg-black">
+                            <video className="h-[260px] w-full object-cover md:h-[540px]" autoPlay muted playsInline ref={localVideo} />
+                            {isCameraOff && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
+                                    <span className="text-sm text-gray-400">Camera Off</span>
+                                </div>
+                            )}
+                        </div>
+                        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-black">
+                            <video className="h-[260px] w-full object-cover md:h-[540px]" autoPlay playsInline ref={remoteVideo} />
+                        </div>
+                    </div>
+
+                    <div className="mt-auto flex items-center justify-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-4">
+                        <button
+                            onClick={toggleMic}
+                            className={`flex h-12 w-12 items-center justify-center rounded-full border cursor-pointer transition-colors ${isMuted
+                                    ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
+                                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
+                                }`}
+                            title={isMuted ? "Unmute" : "Mute"}
+                        >
+                            {isMuted ? <MicOffIcon /> : <MicIcon />}
+                        </button>
+                        <button
+                            onClick={toggleCamera}
+                            className={`flex h-12 w-12 items-center justify-center rounded-full border cursor-pointer transition-colors ${isCameraOff
+                                    ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
+                                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
+                                }`}
+                            title={isCameraOff ? "Turn Camera On" : "Turn Camera Off"}
+                        >
+                            {isCameraOff ? <CameraOffIcon /> : <CameraIcon />}
+                        </button>
+                    </div>
+                </>
+            )}
         </div>
     );
 };
