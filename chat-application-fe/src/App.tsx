@@ -28,7 +28,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/chat/:chatId" element={<Chat socketRef={socketRef} />} />
-          <Route path="/room/:chatId" element={<ConferenceRoom socketRef={socketRef} />} />
+          <Route path="/room/:chatId" element={<ConferenceRoom />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
