@@ -114,7 +114,7 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
                     credential: "TljsISXps2qYEEIY",
                 },
             ],
-            // iceTransportPolicy: "relay"
+            iceTransportPolicy: "all"
         });
 
         const localStream = localStreamRef.current;
