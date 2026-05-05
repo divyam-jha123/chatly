@@ -43,9 +43,7 @@ const getIceServersFromEnv = (): RTCIceServer[] => {
     }
 
     try {
-        console.log("configuredIceServers", configuredIceServers);
         const parsedIceServers = JSON.parse(configuredIceServers);
-        console.log("parsedIceServers", parsedIceServers);
         if (!Array.isArray(parsedIceServers) || parsedIceServers.length === 0) {
             return defaultIceServers;
         }
