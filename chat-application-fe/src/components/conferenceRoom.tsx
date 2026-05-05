@@ -117,7 +117,7 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
 
         const pc = new RTCPeerConnection({
             iceServers: getIceServersFromEnv(),
-            iceTransportPolicy: "relay"
+            iceTransportPolicy: "all"
         });
 
         const localStream = localStreamRef.current;
