@@ -29,6 +29,33 @@ interface ConferenceIcePayload {
     candidate: RTCIceCandidateInit;
 }
 
+const defaultIceServers: RTCIceServer[] = [
+    {
+        urls: "stun:stun.l.google.com:19302",
+    },
+];
+
+const getIceServersFromEnv = (): RTCIceServer[] => {
+    const configuredIceServers = import.meta.env.VITE_WEBRTC_ICE_SERVERS;
+
+    if (!configuredIceServers) {
+        return defaultIceServers;
+    }
+
+    try {
+        console.log("configuredIceServers", configuredIceServers);
+        const parsedIceServers = JSON.parse(configuredIceServers);
+        console.log("parsedIceServers", parsedIceServers);
+        if (!Array.isArray(parsedIceServers) || parsedIceServers.length === 0) {
+            return defaultIceServers;
+        }
+        return parsedIceServers;
+    } catch (error) {
+        console.error("Invalid VITE_WEBRTC_ICE_SERVERS value. Falling back to default STUN server.", error);
+        return defaultIceServers;
+    }
+};
+
 export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
     const localVideo = useRef<HTMLVideoElement | null>(null);
     const remoteVideo = useRef<HTMLVideoElement | null>(null);
@@ -89,32 +116,8 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
         }
 
         const pc = new RTCPeerConnection({
-            iceServers: [
-                {
-                    urls: "stun:stun.relay.metered.ca:80",
-                },
-                {
-                    urls: "turn:global.relay.metered.ca:80",
-                    username: "70e9e83e994b166075a051aa",
-                    credential: "TljsISXps2qYEEIY",
-                },
-                {
-                    urls: "turn:global.relay.metered.ca:80?transport=tcp",
-                    username: "70e9e83e994b166075a051aa",
-                    credential: "TljsISXps2qYEEIY",
-                },
-                {
-                    urls: "turn:global.relay.metered.ca:443",
-                    username: "70e9e83e994b166075a051aa",
-                    credential: "TljsISXps2qYEEIY",
-                },
-                {
-                    urls: "turns:global.relay.metered.ca:443?transport=tcp",
-                    username: "70e9e83e994b166075a051aa",
-                    credential: "TljsISXps2qYEEIY",
-                },
-            ],
-            iceTransportPolicy: "all"
+            iceServers: getIceServersFromEnv(),
+            iceTransportPolicy: "relay"
         });
 
         const localStream = localStreamRef.current;
