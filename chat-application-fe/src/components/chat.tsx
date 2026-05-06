@@ -16,7 +16,7 @@ const TopBar = () => {
         <div className="font-bold text-lg">chatly</div>
         <div className="text-sm text-gray-500 truncate">Room: {chatId}</div>
       </div>
-      <button className="shrink-0 border border-gray-300 rounded-md cursor-pointer px-3 py-2 sm:px-4" onClick={() => {
+      <button className="shrink-0 border border-blue-600 bg-blue-600 text-white rounded-md cursor-pointer px-3 py-2 sm:px-4" onClick={() => {
         navigate(`/room/${chatId}`)
       }}>join call</button>
     </div>

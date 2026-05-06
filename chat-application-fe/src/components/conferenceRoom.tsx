@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type MutableRefObject } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { MicIcon, MicOffIcon, CameraIcon, CameraOffIcon } from "../icons";
+import { EndCallIcon } from "../icons/endCall";
 
 interface ConferenceRoomProps {
     socketRef: MutableRefObject<WebSocket | null>;
@@ -55,6 +56,7 @@ const getIceServersFromEnv = (): RTCIceServer[] => {
 };
 
 export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
+    const navigate = useNavigate();
     const localVideo = useRef<HTMLVideoElement | null>(null);
     const remoteVideo = useRef<HTMLVideoElement | null>(null);
     const localStreamRef = useRef<MediaStream | null>(null);
@@ -311,6 +313,48 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
         }
     };
 
+    const cleanupConference = () => {
+        const socket = socketRef.current;
+
+        if (socket && openListenerRef.current) {
+            socket.removeEventListener("open", openListenerRef.current);
+            openListenerRef.current = null;
+        }
+
+        if (socket && socket.readyState === WebSocket.OPEN && chatId && joinedConferenceRef.current) {
+            socket.send(
+                JSON.stringify({
+                    type: "conference:leave",
+                    payload: {
+                        roomId: chatId,
+                        userId,
+                    },
+                }),
+            );
+            joinedConferenceRef.current = false;
+            setHasJoinedConference(false);
+        }
+
+        for (const pc of peerConnectionsRef.current.values()) {
+            pc.close();
+        }
+
+        peerConnectionsRef.current.clear();
+        pendingIceCandidatesRef.current.clear();
+
+        if (localStreamRef.current) {
+            localStreamRef.current.getTracks().forEach((track) => {
+                track.stop();
+            });
+            localStreamRef.current = null;
+        }
+    };
+
+    const endCall = () => {
+        cleanupConference();
+        navigate(chatId ? `/chat/${chatId}` : "/", { replace: true });
+    };
+
     useEffect(() => {
         const socket = socketRef.current;
         if (!socket) return;
@@ -359,37 +403,7 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
 
     useEffect(() => {
         return () => {
-            const socket = socketRef.current;
-
-            if (socket && openListenerRef.current) {
-                socket.removeEventListener("open", openListenerRef.current);
-            }
-
-            if (socket && socket.readyState === WebSocket.OPEN && chatId && joinedConferenceRef.current) {
-                socket.send(
-                    JSON.stringify({
-                        type: "conference:leave",
-                        payload: {
-                            roomId: chatId,
-                            userId,
-                        },
-                    }),
-                );
-            }
-
-            for (const pc of peerConnectionsRef.current.values()) {
-                pc.close();
-            }
-
-            peerConnectionsRef.current.clear();
-            pendingIceCandidatesRef.current.clear();
-
-            if (localStreamRef.current) {
-                localStreamRef.current.getTracks().forEach((track) => {
-                    track.stop();
-                });
-                localStreamRef.current = null;
-            }
+            cleanupConference();
         };
     }, [chatId, socketRef, userId]);
 
@@ -401,7 +415,7 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
                     <div className="text-sm text-gray-500">Room: {chatId}</div>
                 </div>
                 <button
-                    className="rounded-md border border-gray-300 px-4 py-2 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-md border border-blue-600 bg-blue-600 px-4 py-2 text-white cursor-pointer transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:border-blue-300 disabled:bg-blue-300"
                     onClick={joinConference}
                     disabled={isJoining || hasJoinedConference}
                 >
@@ -481,6 +495,13 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
                             title={isCameraOff ? "Turn Camera On" : "Turn Camera Off"}
                         >
                             {isCameraOff ? <CameraOffIcon /> : <CameraIcon />}
+                        </button>
+                        <button
+                            onClick={endCall}
+                            className="flex h-12 w-12 items-center justify-center rounded-full border border-red-300 bg-red-50 text-red-600 transition-colors hover:bg-red-100 cursor-pointer"
+                            title="End Call"
+                        >
+                            <EndCallIcon />
                         </button>
                     </div>
                 </>
