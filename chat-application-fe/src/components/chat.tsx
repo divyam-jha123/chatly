@@ -42,65 +42,85 @@ export const Chat = ({socketRef}: {socketRef: MutableRefObject<WebSocket | null>
       localStorage.setItem("chat_userId", userId);
     }
 
-    const socket = socketRef.current;
-    if (!socket) return;
-
     setMessages([]);
+    let retryTimer: number | null = null;
+    let cleanupSocketHandlers: (() => void) | null = null;
+    let isCancelled = false;
 
-    const sendJoin = () => {
-      if (socket.readyState !== WebSocket.OPEN) return;
+    const setupChatSocket = () => {
+      if (isCancelled) return;
 
-      socket.send(
-        JSON.stringify({
-          type: "join",
-          payload: {
-            roomId: chatId,
-            userId,
-          },
-        }),
-      );
-    };
-
-    const handleOpen = () => {
-      console.log("connected to the ws server");
-      console.log(chatId);
-      sendJoin();
-    };
-
-    if (socket.readyState === WebSocket.OPEN) {
-      sendJoin();
-    } else if (socket.readyState === WebSocket.CONNECTING) {
-      socket.addEventListener("open", handleOpen);
-    }
-
-    const handleMessage = (event: MessageEvent<string>) => {
-      const parsedData = JSON.parse(event.data);
-
-      if (parsedData.type === "history") {
-        const history: ChatMessage[] = parsedData.payload.map(
-          (msg: { message: string; sender: string }) => ({
-            text: msg.message,
-            sender: msg.sender === "self" ? "self" : "other",
-          }),
-        );
-        setMessages(history);
+      const socket = socketRef.current;
+      if (!socket) {
+        retryTimer = window.setTimeout(setupChatSocket, 100);
         return;
       }
 
-      const incomingMessage = parsedData?.payload?.message;
-      const sender: "self" | "other" =
-        parsedData?.payload?.sender === "self" ? "self" : "other";
+      const sendJoin = () => {
+        if (socket.readyState !== WebSocket.OPEN) return;
 
-      if (typeof incomingMessage === "string") {
-        setMessages((prev) => [...prev, { text: incomingMessage, sender }]);
+        socket.send(
+          JSON.stringify({
+            type: "join",
+            payload: {
+              roomId: chatId,
+              userId,
+            },
+          }),
+        );
+      };
+
+      const handleOpen = () => {
+        console.log("connected to the ws server");
+        console.log(chatId);
+        sendJoin();
+      };
+
+      if (socket.readyState === WebSocket.OPEN) {
+        sendJoin();
+      } else if (socket.readyState === WebSocket.CONNECTING) {
+        socket.addEventListener("open", handleOpen);
       }
+
+      const handleMessage = (event: MessageEvent<string>) => {
+        const parsedData = JSON.parse(event.data);
+
+        if (parsedData.type === "history") {
+          const history: ChatMessage[] = parsedData.payload.map(
+            (msg: { message: string; sender: string }) => ({
+              text: msg.message,
+              sender: msg.sender === "self" ? "self" : "other",
+            }),
+          );
+          setMessages(history);
+          return;
+        }
+
+        const incomingMessage = parsedData?.payload?.message;
+        const sender: "self" | "other" =
+          parsedData?.payload?.sender === "self" ? "self" : "other";
+
+        if (typeof incomingMessage === "string") {
+          setMessages((prev) => [...prev, { text: incomingMessage, sender }]);
+        }
+      };
+
+      socket.addEventListener("message", handleMessage);
+
+      cleanupSocketHandlers = () => {
+        socket.removeEventListener("open", handleOpen);
+        socket.removeEventListener("message", handleMessage);
+      };
     };
 
-    socket.addEventListener("message", handleMessage);
+    setupChatSocket();
 
     return () => {
-      socket.removeEventListener("open", handleOpen);
-      socket.removeEventListener("message", handleMessage);
+      isCancelled = true;
+      if (retryTimer !== null) {
+        window.clearTimeout(retryTimer);
+      }
+      cleanupSocketHandlers?.();
     };
   }, [chatId, socketRef]);
 
