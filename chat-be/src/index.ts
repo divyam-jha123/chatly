@@ -45,14 +45,36 @@ async function removeFcmTokenForUsers(token: string, candidateUserIds: string[])
   );
 }
 
+async function upsertRoomMember(roomId: string, memberUserId: string) {
+  await db
+    .collection("rooms")
+    .doc(roomId)
+    .collection("members")
+    .doc(memberUserId)
+    .set(
+      {
+        joinedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+}
+
 async function sendChatNotifications(roomId: string, senderUserId: string, messageText: string) {
+  console.log("sendChatNotifi triggered");
+  const roomMembersSnapshot = await db
+    .collection("rooms")
+    .doc(roomId)
+    .collection("members")
+    .get();
+
+  const roomMemberUserIds = roomMembersSnapshot.docs.map((doc) => doc.id);
+  const onlineRoomUserIds = allSockets
+    .filter((user) => user.room === roomId && user.userId !== senderUserId)
+    .map((user) => user.userId);
+
   const targetUserIds = Array.from(
-    new Set(
-      allSockets
-        .filter((user) => user.room === roomId && user.userId !== senderUserId)
-        .map((user) => user.userId),
-    ),
-  );
+    new Set([...roomMemberUserIds, ...onlineRoomUserIds]),
+  ).filter((targetUserId) => targetUserId !== senderUserId);
 
   if (targetUserIds.length === 0) return;
 
@@ -188,6 +210,7 @@ wss.on("connection", (ws) => {
     if (parsedMessage.type === "join") {
       userId = parsedMessage.payload.userId;
       upsertSocketUser(ws, parsedMessage.payload.roomId, userId);
+      await upsertRoomMember(parsedMessage.payload.roomId, userId);
 
       try {
         const roomId = parsedMessage.payload.roomId;
