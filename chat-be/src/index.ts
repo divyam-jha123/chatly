@@ -1,5 +1,5 @@
 import { WebSocketServer, WebSocket } from "ws";
-import { db } from "./firebaseAdmin.js";
+import { db, messaging } from "./firebaseAdmin.js";
 import { FieldValue } from "firebase-admin/firestore";
 
 const port = process.env.PORT ? parseInt(process.env.PORT) : 8080;
@@ -14,6 +14,99 @@ interface User {
 const allSockets: User[] = [];
 const conferenceRooms = new Map<string, Set<string>>();
 const conferenceMembership = new Map<WebSocket, { roomId: string; userId: string }>();
+
+async function registerFcmToken(userId: string, token: string) {
+  await db
+    .collection("users")
+    .doc(userId)
+    .set(
+      {
+        fcmTokens: FieldValue.arrayUnion(token),
+      },
+      { merge: true },
+    );
+}
+
+async function removeFcmTokenForUsers(token: string, candidateUserIds: string[]) {
+  if (candidateUserIds.length === 0) return;
+
+  await Promise.all(
+    candidateUserIds.map(async (candidateUserId) => {
+      await db
+        .collection("users")
+        .doc(candidateUserId)
+        .set(
+          {
+            fcmTokens: FieldValue.arrayRemove(token),
+          },
+          { merge: true },
+        );
+    }),
+  );
+}
+
+async function sendChatNotifications(roomId: string, senderUserId: string, messageText: string) {
+  const targetUserIds = Array.from(
+    new Set(
+      allSockets
+        .filter((user) => user.room === roomId && user.userId !== senderUserId)
+        .map((user) => user.userId),
+    ),
+  );
+
+  if (targetUserIds.length === 0) return;
+
+  const userSnapshots = await Promise.all(
+    targetUserIds.map((targetUserId) => db.collection("users").doc(targetUserId).get()),
+  );
+
+  const allTokens = Array.from(
+    new Set(
+      userSnapshots.flatMap((snapshot) => {
+        const tokens = snapshot.data()?.["fcmTokens"];
+        if (!Array.isArray(tokens)) return [];
+        return tokens.filter((token): token is string => typeof token === "string");
+      }),
+    ),
+  );
+
+  if (allTokens.length === 0) return;
+
+  const response = await messaging.sendEachForMulticast({
+    tokens: allTokens,
+    notification: {
+      title: `New message in room ${roomId}`,
+      body: messageText,
+    },
+    data: {
+      roomId,
+      senderUserId,
+      type: "chat:new-message",
+    },
+  });
+
+  const invalidTokens: string[] = [];
+  response.responses.forEach((result, idx) => {
+    const token = allTokens[idx];
+    if (typeof token !== "string") return;
+
+    if (
+      !result.success &&
+      (result.error?.code === "messaging/registration-token-not-registered" ||
+        result.error?.code === "messaging/invalid-registration-token")
+    ) {
+      invalidTokens.push(token);
+    }
+  });
+
+  if (invalidTokens.length > 0) {
+    await Promise.all(
+      invalidTokens.map((invalidToken) =>
+        removeFcmTokenForUsers(invalidToken, targetUserIds),
+      ),
+    );
+  }
+}
 
 function getSocketUser(ws: WebSocket) {
   return allSockets.find((user) => user.socket === ws);
@@ -139,6 +232,12 @@ wss.on("connection", (ws) => {
             senderId: userId,
             timestamp: FieldValue.serverTimestamp(),
           });
+
+        await sendChatNotifications(
+          currentUserRoom,
+          userId,
+          parsedMessage.payload.message,
+        );
       } catch (err) {
         console.error("Error saving message:", err);
       }
@@ -155,6 +254,23 @@ wss.on("connection", (ws) => {
             }),
           );
         }
+      }
+    }
+
+    if (parsedMessage.type === "notifications:register-token") {
+      try {
+        const payload = parsedMessage.payload;
+        if (
+          payload &&
+          typeof payload.userId === "string" &&
+          typeof payload.token === "string" &&
+          payload.userId.length > 0 &&
+          payload.token.length > 0
+        ) {
+          await registerFcmToken(payload.userId, payload.token);
+        }
+      } catch (error) {
+        console.error("Error registering FCM token:", error);
       }
     }
 

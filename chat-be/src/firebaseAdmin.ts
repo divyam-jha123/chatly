@@ -1,5 +1,6 @@
 import { initializeApp, cert, type ServiceAccount } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { getMessaging } from "firebase-admin/messaging";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -35,3 +36,4 @@ const app = initializeApp({
 });
 
 export const db = getFirestore(app);
+export const messaging = getMessaging(app);
