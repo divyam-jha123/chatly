@@ -46,9 +46,13 @@ function getRoomSocket(roomId: string, targetUserId: string) {
 
 function leaveConference(ws: WebSocket) {
   const membership = conferenceMembership.get(ws);
+  console.log("membership",membership);
+
   if (!membership) return;
 
   const roomParticipants = conferenceRooms.get(membership.roomId);
+
+
   if (!roomParticipants) {
     conferenceMembership.delete(ws);
     return;
@@ -74,7 +78,7 @@ function leaveConference(ws: WebSocket) {
     }
   }
 
-  if (roomParticipants.size === 0) {
+  if (roomParticipants.size === 1) {
     conferenceRooms.delete(membership.roomId);
   }
 
@@ -195,7 +199,6 @@ wss.on("connection", (ws) => {
             );
           }
         }
-        console.log("conference Membership",conferenceMembership);
       } catch (error) {
         console.error("Error joining conference:", error);
       }

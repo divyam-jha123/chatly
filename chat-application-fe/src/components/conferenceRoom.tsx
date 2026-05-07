@@ -12,6 +12,16 @@ interface ConferenceParticipantsPayload {
     participants: string[];
 }
 
+interface ConferenceUserJoinedPayload {
+    roomId: string;
+    userId: string;
+}
+
+interface ConferenceUserLeftPayload {
+    roomId: string;
+    userId: string;
+}
+
 interface ConferenceOfferPayload {
     roomId: string;
     fromUserId: string;
@@ -64,11 +74,14 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
     const pendingIceCandidatesRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
     const openListenerRef = useRef<(() => void) | null>(null);
     const joinedConferenceRef = useRef(false);
+    const hasSeenOtherParticipantRef = useRef(false);
+    const isLeavingConferenceRef = useRef(false);
     const { chatId } = useParams();
     const [isJoining, setIsJoining] = useState(false);
     const [hasJoinedConference, setHasJoinedConference] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
     const [isCameraOff, setIsCameraOff] = useState(false);
+    const [remoteParticipantIds, setRemoteParticipantIds] = useState<string[]>([]);
 
     const toggleMic = () => {
         const stream = localStreamRef.current;
@@ -266,6 +279,9 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
         setIsJoining(true);
 
         try {
+            setRemoteParticipantIds([]);
+            hasSeenOtherParticipantRef.current = false;
+            isLeavingConferenceRef.current = false;
 
             const socket = socketRef.current;
             if (!socket) return;
@@ -348,9 +364,15 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
             });
             localStreamRef.current = null;
         }
+
+        setRemoteParticipantIds([]);
+        hasSeenOtherParticipantRef.current = false;
     };
 
     const endCall = () => {
+        if (isLeavingConferenceRef.current) return;
+        isLeavingConferenceRef.current = true;
+
         cleanupConference();
         navigate(chatId ? `/chat/${chatId}` : "/", { replace: true });
     };
@@ -366,9 +388,37 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
                 const payload = data.payload as ConferenceParticipantsPayload;
                 if (payload.roomId !== chatId) return;
 
+                setRemoteParticipantIds(payload.participants);
+                hasSeenOtherParticipantRef.current = payload.participants.length > 0;
+
                 for (const participantId of payload.participants) {
                     await createOfferFor(participantId);
                 }
+            }
+
+            if (data.type === "conference:user-joined") {
+                const payload = data.payload as ConferenceUserJoinedPayload;
+                if (payload.roomId !== chatId) return;
+
+                setRemoteParticipantIds((prev) => {
+                    if (prev.includes(payload.userId)) return prev;
+                    return [...prev, payload.userId];
+                });
+                hasSeenOtherParticipantRef.current = true;
+            }
+
+            if (data.type === "conference:user-left") {
+                const payload = data.payload as ConferenceUserLeftPayload;
+                if (payload.roomId !== chatId) return;
+
+                setRemoteParticipantIds((prev) => prev.filter((id) => id !== payload.userId));
+
+                const pc = peerConnectionsRef.current.get(payload.userId);
+                if (pc) {
+                    pc.close();
+                    peerConnectionsRef.current.delete(payload.userId);
+                }
+                pendingIceCandidatesRef.current.delete(payload.userId);
             }
 
             if (data.type === "offer") {
@@ -396,6 +446,15 @@ export const ConferenceRoom = ({ socketRef }: ConferenceRoomProps) => {
             socket.removeEventListener("message", handleMessage);
         };
     }, [chatId, socketRef]);
+
+    // If someone else was in the room and they left, the remaining user should also leave.
+    useEffect(() => {
+        if (!hasJoinedConference) return;
+
+        if (remoteParticipantIds.length === 0 && hasSeenOtherParticipantRef.current) {
+            endCall();
+        }
+    }, [remoteParticipantIds.length, hasJoinedConference]);
 
     useEffect(() => {
         joinedConferenceRef.current = hasJoinedConference;
